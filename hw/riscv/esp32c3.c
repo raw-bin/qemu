@@ -50,6 +50,7 @@
 #include "hw/dma/esp32c3_gdma.h"
 #include "hw/display/esp_rgb.h"
 #include "hw/net/can/esp32c3_twai.h"
+#include "hw/i2c/esp32_i2c.h"
 
 #define ESP32C3_IO_WARNING          0
 
@@ -90,6 +91,7 @@ struct Esp32C3MachineState {
     ESP32C3UsbJtagState jtag;
     ESPRgbState rgb;
     Esp32C3TWAIState twai;
+    Esp32I2CState i2c;
 };
 
 /* Fake register used by ESP-IDF application to determine whether the code is running on real hardware or on QEMU */
@@ -424,6 +426,7 @@ static void esp32c3_machine_init(MachineState *machine)
     object_initialize_child(OBJECT(machine), "jtag", &ms->jtag, TYPE_ESP32C3_JTAG);
     object_initialize_child(OBJECT(machine), "rgb", &ms->rgb, TYPE_ESP_RGB);
     object_initialize_child(OBJECT(machine), "twai", &ms->twai, TYPE_ESP32C3_TWAI);
+    object_initialize_child(OBJECT(machine), "i2c", &ms->i2c, TYPE_ESP32_I2C);
 
     /* Realize all the I/O peripherals we depend on */
 
@@ -656,6 +659,19 @@ static void esp32c3_machine_init(MachineState *machine)
     memory_region_add_subregion_overlap(sys_mem, DR_REG_TWAI_BASE, twai_mr, 0);
     sysbus_connect_irq(SYS_BUS_DEVICE(&ms->twai), 0,
                        qdev_get_gpio_in(DEVICE(&ms->intmatrix), ETS_TWAI_INTR_SOURCE));
+
+    /* I2C controller realization */
+    {
+        qdev_realize(DEVICE(&ms->i2c), &ms->periph_bus, &error_fatal);
+        MemoryRegion *mr = sysbus_mmio_get_region(SYS_BUS_DEVICE(&ms->i2c), 0);
+        memory_region_add_subregion_overlap(sys_mem, DR_REG_I2C_EXT_BASE, mr, 0);
+        sysbus_connect_irq(SYS_BUS_DEVICE(&ms->i2c), 0,
+                           qdev_get_gpio_in(intmatrix_dev, ETS_I2C_EXT0_INTR_SOURCE));
+
+        /* Attach SSD1306 OLED display to the I2C bus */
+        I2CBus *i2c_bus = I2C_BUS(qdev_get_child_bus(DEVICE(&ms->i2c), "i2c"));
+        i2c_slave_create_simple(i2c_bus, "ssd1306", 0x3c);
+    }
 }
 
 
