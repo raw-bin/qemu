@@ -1539,6 +1539,10 @@
 #
 # @gl: Enable OpenGL support (default: off).
 #
+# @show-console: Show only the specified console at startup, hiding
+#     all others.  The value can be either a console label (e.g.
+#     "ssd1306") or a numeric console index.  (since: 9.3)
+#
 # Since: 2.12
 ##
 { 'union'   : 'DisplayOptions',
@@ -1546,7 +1550,8 @@
                 '*full-screen'   : 'bool',
                 '*window-close'  : 'bool',
                 '*show-cursor'   : 'bool',
-                '*gl'            : 'DisplayGLMode' },
+                '*gl'            : 'DisplayGLMode',
+                '*show-console'  : 'str' },
   'discriminator' : 'type',
   'data'    : {
       'gtk': { 'type': 'DisplayGTK', 'if': 'CONFIG_GTK' },

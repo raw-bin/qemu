@@ -26,6 +26,7 @@
 #include "qemu/osdep.h"
 #include "qemu/module.h"
 #include "qemu/cutils.h"
+#include "qemu/error-report.h"
 #include "ui/console.h"
 #include "ui/input.h"
 #include "ui/sdl2.h"
@@ -876,11 +877,42 @@ static void sdl2_display_init(DisplayState *ds, DisplayOptions *o)
         return;
     }
     sdl2_console = g_new0(struct sdl2_console, sdl2_num_outputs);
+
+    /* Determine which console to show based on show-console option */
+    int show_console_idx = -1; /* -1 means use default behavior */
+    if (o->show_console) {
+        /* Try matching by label first, then by index number */
+        for (i = 0; i < sdl2_num_outputs; i++) {
+            QemuConsole *con = qemu_console_lookup_by_index(i);
+            char *label = qemu_console_get_label(con);
+            if (label && strcmp(label, o->show_console) == 0) {
+                show_console_idx = i;
+                g_free(label);
+                break;
+            }
+            g_free(label);
+        }
+        if (show_console_idx < 0) {
+            /* Try as numeric index */
+            char *end;
+            long idx = strtol(o->show_console, &end, 10);
+            if (*end == '\0' && idx >= 0 && idx < sdl2_num_outputs) {
+                show_console_idx = idx;
+            }
+        }
+        if (show_console_idx < 0) {
+            error_report("sdl2: show-console '%s' not found", o->show_console);
+        }
+    }
+
     for (i = 0; i < sdl2_num_outputs; i++) {
         QemuConsole *con = qemu_console_lookup_by_index(i);
         assert(con != NULL);
-        if (!qemu_console_is_graphic(con) &&
-            qemu_console_get_index(con) != 0) {
+        if (show_console_idx >= 0) {
+            /* When show-console is specified, hide all except the chosen one */
+            sdl2_console[i].hidden = (i != show_console_idx);
+        } else if (!qemu_console_is_graphic(con) &&
+                   qemu_console_get_index(con) != 0) {
             sdl2_console[i].hidden = true;
         }
         sdl2_console[i].idx = i;
